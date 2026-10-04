@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Openline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<main id="gate" class="gate">
+  <div class="gate-inner">
+    <h1 class="wordmark">Openline<span class="dot" aria-hidden="true"></span></h1>
+    <p class="lede">Talk face to face with a random adult. Calls go straight between your browsers and are encrypted. We never see or store your video.</p>
+
+    <ul class="rules">
+      <li>Openline is for adults 18 and over only.</li>
+      <li>No nudity or sexual content.</li>
+      <li>No harassment, hate, or threats.</li>
+      <li>Report anyone who looks under 18. They are removed right away.</li>
+    </ul>
+
+    <section id="authView" hidden>
+      <div class="tabs" role="tablist">
+        <button class="tab" role="tab" id="loginTab" aria-selected="true">Log in</button>
+        <button class="tab" role="tab" id="signupTab" aria-selected="false">Sign up</button>
+      </div>
+      <form id="authForm" novalidate>
+        <label class="field" for="email">Email</label>
+        <input type="email" id="email" autocomplete="email" required>
+        <label class="field" for="password">Password</label>
+        <input type="password" id="password" autocomplete="current-password" minlength="8" required>
+        <label class="check" id="agreeRow" hidden>
+          <input type="checkbox" id="agree">
+          <span>I'm 18 or older and I agree to the rules above.</span>
+        </label>
+        <button class="btn btn-primary btn-wide" type="submit" id="authBtn">Log in</button>
+        <p class="form-error" id="authError" role="alert"></p>
+      </form>
+    </section>
+
+    <section id="verifyView" hidden>
+      <form id="verifyForm" novalidate>
+        <p>Logged in as <strong id="verifyWho"></strong>. One more step: confirm your age before your first call.</p>
+        <label class="field" for="dob">Date of birth</label>
+        <input type="date" id="dob" required>
+        <button class="btn btn-primary btn-wide" type="submit" id="verifyBtn">Verify my age</button>
+        <p class="form-error" id="formError" role="alert"></p>
+        <p class="dev-note" id="devNote" hidden>Development mode: a date of birth stands in for real ID verification. Production uses a verification provider instead.</p>
+        <p class="dev-note">Not you? <button type="button" class="link-btn" data-logout>Log out</button></p>
+      </form>
+    </section>
+
+    <section id="suspendedView" hidden>
+      <p class="form-error">This account is suspended after reports from other users and is under review.</p>
+      <button class="btn btn-quiet" type="button" data-logout>Log out</button>
+    </section>
+  </div>
+</main>
+
+<div id="call" class="call" hidden>
+  <header class="topbar">
+    <p class="wordmark">Openline<span class="dot" aria-hidden="true"></span></p>
+    <div class="topbar-right">
+      <div class="status" aria-live="polite"><span class="lamp" id="lamp"></span><span id="statusText">Starting camera</span></div>
+      <span class="online" id="online" hidden></span>
+      <div class="account"><span class="who" id="whoami"></span><button class="btn btn-quiet btn-small" type="button" id="settingsBtn">Account</button><button class="btn btn-quiet btn-small" type="button" data-logout>Log out</button></div>
+    </div>
+  </header>
+
+  <div class="main">
+    <section class="stage" aria-label="Video">
+      <video id="remoteVideo" autoplay playsinline></video>
+      <div class="placeholder" id="placeholder">Press Start to meet someone.</div>
+      <div class="safety" id="safety" hidden title="Ask the other person to read their code. If it matches yours, nobody is intercepting the call.">Safety code <strong id="safetyCode"></strong></div>
+      <div class="pip"><video id="localVideo" autoplay playsinline muted></video></div>
+    </section>
+
+    <aside class="chat" aria-label="Text chat">
+      <div class="interests">
+        <label for="interests">Your interests (optional, comma separated)</label>
+        <input type="text" id="interests" placeholder="music, travel, football" maxlength="140" autocomplete="off">
+      </div>
+      <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
+      <div>
+        <div class="typing" id="typing"></div>
+        <form class="chat-form" id="chatForm">
+          <input type="text" id="chatInput" placeholder="Chat opens when you are connected" maxlength="1000" autocomplete="off" disabled aria-label="Message">
+          <button class="btn btn-primary" id="sendBtn" disabled>Send</button>
+        </form>
+      </div>
+    </aside>
+  </div>
+
+  <footer class="controls">
+    <button class="btn btn-quiet" id="micBtn" aria-pressed="false">Mute</button>
+    <button class="btn btn-quiet" id="camBtn" aria-pressed="false">Camera off</button>
+    <span class="spacer"></span>
+    <button class="btn btn-primary" id="nextBtn">Start</button>
+    <button class="btn btn-quiet" id="stopBtn" disabled>Stop</button>
+    <span class="spacer"></span>
+    <button class="btn btn-danger" id="reportBtn" disabled>Report</button>
+    <span class="hint"><kbd>Esc</kbd> next &nbsp; <kbd>/</kbd> chat</span>
+  </footer>
+</div>
+
+<dialog id="reportDialog">
+  <form method="dialog" id="reportForm">
+    <h2>Report this person</h2>
+    <p>The call ends and you won't be matched with them again.</p>
+    <label class="reason"><input type="radio" name="reason" value="underage" required> Appears to be under 18</label>
+    <label class="reason"><input type="radio" name="reason" value="sexual"> Nudity or sexual content</label>
+    <label class="reason"><input type="radio" name="reason" value="harassment"> Harassment, hate, or threats</label>
+    <label class="reason"><input type="radio" name="reason" value="spam"> Spam or advertising</label>
+    <label class="reason"><input type="radio" name="reason" value="other"> Something else</label>
+    <div class="dialog-actions">
+      <button class="btn btn-quiet" value="cancel" formnovalidate>Cancel</button>
+      <button class="btn btn-danger" value="submit">Report and leave</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settingsDialog" aria-labelledby="settingsTitle">
+  <h2 id="settingsTitle">Account</h2>
+  <p>Signed in as <strong id="settingsEmail"></strong></p>
+
+  <form class="settings-section" id="passwordForm" novalidate>
+    <h3>Change password</h3>
+    <label class="field" for="curPassword">Current password</label>
+    <input type="password" id="curPassword" autocomplete="current-password">
+    <label class="field" for="newPassword">New password</label>
+    <input type="password" id="newPassword" autocomplete="new-password" minlength="8">
+    <button class="btn btn-quiet" type="submit">Update password</button>
+    <p class="form-error" id="passwordError" role="alert"></p>
+    <p class="form-ok" id="passwordOk" role="status"></p>
+  </form>
+
+  <div class="settings-section">
+    <h3>Devices</h3>
+    <p>Log out of Openline on every browser and device, including this one.</p>
+    <button class="btn btn-quiet" type="button" id="logoutAllBtn">Log out everywhere</button>
+  </div>
+
+  <form class="settings-section" id="deleteForm" novalidate>
+    <h3>Delete account</h3>
+    <p>This permanently removes your account. It can't be undone.</p>
+    <label class="field" for="deletePassword">Password</label>
+    <input type="password" id="deletePassword" autocomplete="current-password">
+    <button class="btn btn-danger" type="submit">Delete my account</button>
+    <p class="form-error" id="deleteError" role="alert"></p>
+  </form>
+
+  <div class="dialog-actions">
+    <button class="btn btn-quiet" type="button" id="settingsClose">Close</button>
+  </div>
+</dialog>
+
+<script src="app.js"></script>
+</body>
+</html>
