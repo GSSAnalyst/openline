@@ -16,6 +16,7 @@ it never receives the call or the chat messages.
 - **Safety code.** Both people see a 6-digit code. If the codes match, nobody is intercepting the call.
 - **Reporting.** Ends the call and blocks the pair. Accounts are suspended automatically on serious reports.
 - **Account settings.** Change password, log out everywhere, delete account.
+- **Feedback button** in the call screen. Read messages with `npm run admin -- feedback`.
 - **Live online count** and keyboard shortcuts (<kbd>Esc</kbd> next, <kbd>/</kbd> focus chat).
 
 ## Run it locally
@@ -77,6 +78,7 @@ npm run admin -- user someone@example.com
 npm run admin -- unsuspend someone@example.com   # after review; old reports stop counting
 npm run admin -- suspend someone@example.com
 npm run admin -- delete someone@example.com
+npm run admin -- feedback             # messages sent with the Feedback button
 npm run admin -- backup /path/to/backup.db
 ```
 

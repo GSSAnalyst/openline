@@ -31,6 +31,7 @@ const SUSPEND_AFTER_REPORTS = 3;                    // distinct reporters before
 const FIND_LIMIT = { max: 20, windowMs: 60_000 };
 const LOGIN_LIMIT = { max: 10, windowMs: 15 * 60_000 }; // failed attempts per IP
 const SIGNUP_LIMIT = { max: 5, windowMs: 60 * 60_000 }; // new accounts per IP
+const FEEDBACK_LIMIT = { max: 10, windowMs: 60 * 60_000 }; // feedback messages per IP
 const MAX_MSG_BYTES = 64 * 1024;
 const INTEREST_WAIT_MS = 5000;        // how long to hold out for a shared interest
 const MAX_INTERESTS = 5;
@@ -77,6 +78,13 @@ db.exec(`
     reason   TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS reports_target ON reports(target);
+  CREATE TABLE IF NOT EXISTS feedback (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    at         INTEGER NOT NULL,
+    user_id    TEXT NOT NULL,
+    message    TEXT NOT NULL,
+    user_agent TEXT
+  );
   CREATE TABLE IF NOT EXISTS blocked_pairs (pair TEXT PRIMARY KEY);
 `);
 // Added after the first release: when a moderator lifted a suspension.
@@ -104,6 +112,7 @@ const q = {
   reporterCount: db.prepare(`SELECT COUNT(DISTINCT reporter) AS n FROM reports
                              WHERE target = ? AND at > COALESCE((SELECT cleared_at FROM users WHERE id = ?), 0)`),
   blockPair:     db.prepare('INSERT OR IGNORE INTO blocked_pairs (pair) VALUES (?)'),
+  insertFeedback: db.prepare('INSERT INTO feedback (at, user_id, message, user_agent) VALUES (?, ?, ?, ?)'),
   isBlocked:     db.prepare('SELECT 1 FROM blocked_pairs WHERE pair = ?'),
 };
 
@@ -239,6 +248,7 @@ function rateLimiter({ max, windowMs }) {
 }
 const loginLimiter = rateLimiter(LOGIN_LIMIT);   // counts failed password checks
 const signupLimiter = rateLimiter(SIGNUP_LIMIT); // counts accounts created
+const feedbackLimiter = rateLimiter(FEEDBACK_LIMIT);
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -297,6 +307,18 @@ app.post('/api/login', async (req, res) => {
   }
   startSession(res, user.id);
   res.json({ user: publicUser(user) });
+});
+
+// Read with: npm run admin -- feedback
+app.post('/api/feedback', requireUser, (req, res) => {
+  if (feedbackLimiter.blocked(req.ip)) return res.status(429).json({ error: 'Thanks! You\'ve sent a lot of feedback. Try again in a while.' });
+  const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+  if (!message) return res.status(400).json({ error: 'Write a message first.' });
+  if (message.length > 2000) return res.status(400).json({ error: 'Keep it under 2000 characters.' });
+  // The browser name helps reproduce bugs ("calls fail on Safari").
+  q.insertFeedback.run(Date.now(), req.user.id, message, String(req.headers['user-agent'] || '').slice(0, 300));
+  feedbackLimiter.hit(req.ip);
+  res.status(201).json({ ok: true });
 });
 
 app.post('/api/logout', (req, res) => {

@@ -9,6 +9,7 @@
 //   npm run admin -- suspend <email>
 //   npm run admin -- unsuspend <email>      lift a suspension after review
 //   npm run admin -- delete <email>         remove an account (reports are kept)
+//   npm run admin -- feedback [count]       newest feedback messages
 //   npm run admin -- backup <file>          consistent copy of the database
 //
 // Changes apply right away for new connections. Someone already online is
@@ -94,6 +95,25 @@ switch (cmd) {
     db.prepare('DELETE FROM sessions WHERE user_id = ?').run(u.id);
     db.prepare('DELETE FROM users WHERE id = ?').run(u.id);
     console.log(`Deleted ${u.email}. Their reports and blocks are kept.`);
+    break;
+  }
+  case 'feedback': {
+    const browser = (ua) => {
+      const s = String(ua || '');
+      const name = /Edg\//.test(s) ? 'Edge' : /OPR\//.test(s) ? 'Opera' : /Firefox\//.test(s) ? 'Firefox'
+        : /Chrome\//.test(s) ? 'Chrome' : /Safari\//.test(s) ? 'Safari' : 'Other';
+      const os = /iPhone|iPad/.test(s) ? 'iOS' : /Android/.test(s) ? 'Android' : /Mac OS/.test(s) ? 'Mac'
+        : /Windows/.test(s) ? 'Windows' : /Linux/.test(s) ? 'Linux' : '?';
+      return `${name} / ${os}`;
+    };
+    const rows = db.prepare(`
+      SELECT f.at, f.message, f.user_agent, u.email FROM feedback f
+      LEFT JOIN users u ON u.id = f.user_id ORDER BY f.at DESC LIMIT ?`).all(Number(arg) || 30);
+    if (!rows.length) console.log('No feedback yet.');
+    for (const r of rows) {
+      console.log(`\n${when(r.at)}  ${r.email || '(deleted)'}  [${browser(r.user_agent)}]`);
+      console.log('  ' + r.message.replace(/\n/g, '\n  '));
+    }
     break;
   }
   case 'backup': {

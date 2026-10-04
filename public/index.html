@@ -73,7 +73,7 @@
     <div class="topbar-right">
       <div class="status" aria-live="polite"><span class="lamp" id="lamp"></span><span id="statusText">Starting camera</span></div>
       <span class="online" id="online" hidden></span>
-      <div class="account"><span class="who" id="whoami"></span><button class="btn btn-quiet btn-small" type="button" id="settingsBtn">Account</button><button class="btn btn-quiet btn-small" type="button" data-logout>Log out</button></div>
+      <div class="account"><span class="who" id="whoami"></span><button class="btn btn-quiet btn-small" type="button" id="feedbackBtn">Feedback</button><button class="btn btn-quiet btn-small" type="button" id="settingsBtn">Account</button><button class="btn btn-quiet btn-small" type="button" data-logout>Log out</button></div>
     </div>
   </header>
 
@@ -125,6 +125,21 @@
     <div class="dialog-actions">
       <button class="btn btn-quiet" value="cancel" formnovalidate>Cancel</button>
       <button class="btn btn-danger" value="submit">Report and leave</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="feedbackDialog" aria-labelledby="feedbackTitle">
+  <form id="feedbackForm" novalidate>
+    <h2 id="feedbackTitle">Send feedback</h2>
+    <p>Something broken, confusing, or a feature you want? Tell us. Your email is attached so we can follow up.</p>
+    <label class="field" for="feedbackText">Message</label>
+    <textarea id="feedbackText" rows="5" maxlength="2000" placeholder="The call got stuck on Connecting when I…"></textarea>
+    <p class="form-error" id="feedbackError" role="alert"></p>
+    <p class="form-ok" id="feedbackOk" role="status"></p>
+    <div class="dialog-actions">
+      <button class="btn btn-quiet" type="button" id="feedbackClose">Close</button>
+      <button class="btn btn-primary" type="submit" id="feedbackSend">Send</button>
     </div>
   </form>
 </dialog>

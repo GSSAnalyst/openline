@@ -27,6 +27,7 @@ button, input, select { font: inherit; }
 .rules { margin: 0 0 1.75rem; padding: 1rem 1.25rem 1rem 2.25rem; border-left: 3px solid var(--accent); background: var(--surface); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .rules li + li { margin-top: .35rem; }
 label.field { display: block; font-weight: 600; margin-bottom: .4rem; }
+textarea { width: 100%; resize: vertical; font: inherit; padding: .8rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg); color: var(--text); }
 input[type=date], input[type=email], input[type=password], input[type=text] { width: 100%; padding: .8rem 1rem; border-radius: var(--radius-sm); border: 1px solid var(--line); background: var(--bg); color: var(--text); color-scheme: dark; }
 .check { display: flex; gap: .65rem; align-items: flex-start; margin: 1.25rem 0 1.5rem; color: var(--muted); }
 .check input { margin-top: .3rem; accent-color: var(--accent); width: 1.1rem; height: 1.1rem; }

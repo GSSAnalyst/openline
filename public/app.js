@@ -122,6 +122,32 @@
   document.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
 
   // ---------- Account settings ----------
+  // ---------- Feedback ----------
+  const feedbackDialog = $('feedbackDialog');
+  $('feedbackBtn').addEventListener('click', () => {
+    $('feedbackError').textContent = $('feedbackOk').textContent = '';
+    $('feedbackSend').disabled = false;
+    feedbackDialog.showModal();
+    $('feedbackText').focus();
+  });
+  $('feedbackClose').addEventListener('click', () => feedbackDialog.close());
+  $('feedbackForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    $('feedbackError').textContent = $('feedbackOk').textContent = '';
+    const message = $('feedbackText').value.trim();
+    if (!message) { $('feedbackError').textContent = 'Write a message first.'; return; }
+    $('feedbackSend').disabled = true;
+    try {
+      await api('/api/feedback', { message });
+      $('feedbackText').value = '';
+      $('feedbackOk').textContent = 'Thanks! Your feedback was sent.';
+    } catch (ex) {
+      $('feedbackError').textContent = ex.message;
+    } finally {
+      $('feedbackSend').disabled = false;
+    }
+  });
+
   const settingsDialog = $('settingsDialog');
   $('settingsBtn').addEventListener('click', () => {
     $('settingsEmail').textContent = me ? me.email : '';
@@ -173,7 +199,8 @@
   });
 
   fetch('/api/config').then(r => r.json()).then(c => {
-    $('devNote').hidden = !c.dev;
+    // Only shown to you when running on your own machine, not to visitors.
+    $('devNote').hidden = !(c.dev && ['localhost', '127.0.0.1'].includes(location.hostname));
     $('verifyForm').hidden = !c.selfDeclaredAge;
     $('verifyUnavailable').hidden = c.selfDeclaredAge;
   }).catch(() => {});
