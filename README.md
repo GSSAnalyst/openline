@@ -32,6 +32,51 @@ Open http://localhost:3000 in two different browsers, or one normal and one
 private window, and sign up with a different email in each. Browsers only allow
 camera access on `localhost` or HTTPS.
 
+## Share from your Mac (quick test with friends)
+
+A free Cloudflare "quick tunnel" gives the app running on your computer a
+public HTTPS link, with no account, domain or router setup:
+
+```
+friend's browser → https://random-words.trycloudflare.com → Cloudflare → tunnel → your Mac (localhost:3000)
+```
+
+Video calls don't pass through the tunnel or your Mac; once matched, friends
+connect directly to each other. The tunnel only carries the site, logins and
+matchmaking.
+
+**One-time setup:** download `cloudflared` (Apple Silicon shown; use
+`cloudflared-darwin-amd64.tgz` on Intel Macs, or `brew install cloudflared`
+if you have Homebrew):
+
+```bash
+curl -L -o /tmp/cf.tgz https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-darwin-arm64.tgz
+tar -xzf /tmp/cf.tgz -C ~ && ~/cloudflared --version
+```
+
+**Each time**, in two Terminal tabs:
+
+```bash
+# Tab 1: the app. TRUST_PROXY=1 makes rate limits see each friend's own IP
+# instead of treating everyone as one visitor coming through the tunnel.
+cd ~/Desktop/openline && TRUST_PROXY=1 npm start
+
+# Tab 2: the tunnel. Prints the public link to share.
+~/cloudflared tunnel --protocol http2 --url http://localhost:3000
+```
+
+Things to know:
+
+- **The link is temporary.** If your Mac sleeps or the Wi-Fi drops, Cloudflare
+  deletes the tunnel and the link stops working for good. Run the tunnel
+  command again for a new link, and send it to your friends.
+- **Keep the Mac awake** while people use it: plug it in and run
+  `caffeinate -dis` in a third tab.
+- **Accounts persist** in `data/openline.db`, so friends can log back in on a
+  new link.
+- For a link that never changes and doesn't depend on your Mac, deploy it
+  instead (see [Going live](#going-live)).
+
 ## Configuration
 
 Set these as environment variables.
