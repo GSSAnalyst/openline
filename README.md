@@ -37,9 +37,14 @@ Set these as environment variables.
 
 | Variable | Default | What it does |
 |---|---|---|
-| `PORT` | `3000` | Port the server listens on |
-| `NODE_ENV` | (unset) | Set to `production` to turn off the dev age check, require HTTPS cookies, and trust one reverse proxy |
+| `PORT` | `3000` | Port the server listens on (hosts usually set this for you) |
+| `NODE_ENV` | (unset) | `production` for the live site: HTTPS-only cookies, HSTS, and the age check rules below |
 | `DB_PATH` | `data/openline.db` | Where the SQLite database is stored. On a host, point this at a persistent disk |
+| `ALLOW_SELF_DECLARED_AGE` | (unset) | In production, `true` lets people verify by typing their date of birth. Without it (and without a verification provider) nobody can get past the age step |
+| `TURN_URLS` | (unset) | Comma-separated TURN server addresses, e.g. `turn:host:3478,turns:host:443?transport=tcp` |
+| `TURN_USERNAME`, `TURN_CREDENTIAL` | (unset) | TURN login. Only sent to verified, logged-in users |
+| `STUN_URLS` | Google's public STUN | Comma-separated STUN servers |
+| `TRUST_PROXY` | `1` in production, else `0` | How many reverse proxies sit in front of the app, so rate limits see real visitor IPs |
 
 The database holds users' emails and password hashes. `data/` is in
 `.gitignore`. Never commit it.
@@ -47,12 +52,36 @@ The database holds users' emails and password hashes. `data/` is in
 ## Project layout
 
 ```
-server.js           HTTP API, accounts, sessions, matchmaking, WebSocket signaling
-public/index.html   Page markup
-public/app.js       Client: accounts UI, WebRTC call, chat, safety code
-public/styles.css   Styles
-data/               SQLite database (created on first run, not committed)
+server.js            HTTP API, accounts, sessions, matchmaking, WebSocket signaling
+scripts/admin.js     Moderation tool (npm run admin)
+public/index.html    Page markup
+public/app.js        Client: accounts UI, WebRTC call, chat, safety code
+public/styles.css    Styles
+public/terms.html    Terms of Service (draft, fill in placeholders)
+public/privacy.html  Privacy Policy (draft, fill in placeholders)
+render.yaml          Render deployment blueprint
+data/                SQLite database (created on first run, not committed)
 ```
+
+## Moderation
+
+Reports are saved in the database. Review them with the admin tool. It runs
+against the same database, also while the server is running (on Render: the
+service's **Shell** tab).
+
+```bash
+npm run admin -- stats
+npm run admin -- reports 50          # newest reports, with emails
+npm run admin -- suspended           # accounts waiting for review
+npm run admin -- user someone@example.com
+npm run admin -- unsuspend someone@example.com   # after review; old reports stop counting
+npm run admin -- suspend someone@example.com
+npm run admin -- delete someone@example.com
+npm run admin -- backup /path/to/backup.db
+```
+
+Check `suspended` regularly. An "appears under 18" report suspends someone
+immediately, so a false report locks out an innocent person until you lift it.
 
 ## How it works
 
@@ -74,33 +103,61 @@ data/               SQLite database (created on first run, not committed)
 
 Found a security problem? Please report it privately to the maintainer instead of opening a public issue.
 
-## Before launch
+## Going live
 
-What's a stand-in today, and what production needs:
+### 1. Decide on age verification
 
-| Area | Now | Production |
+| Option | Cost | Strength |
 |---|---|---|
-| Age verification | Self-typed date of birth | A real provider (Yoti, Persona, Veriff). Store the provider's person id on the account and refuse to verify a second account for the same person, so bans can't be dodged by signing up again. The dev route is off when `NODE_ENV=production`. |
-| Accounts | No email confirmation or password reset | Add both (needs an email sending service) |
-| Moderation | Reports saved in the `reports` table | A review queue with human moderators, appeals, and a path to report child-safety material to NCMEC |
-| Connectivity | Public STUN only | Your own TURN server (coturn); roughly 10-20% of users can't connect without it |
-| Transport | HTTP on localhost | HTTPS/WSS behind a reverse proxy |
-| Scale | One server: SQLite, queue and rate limits in memory | For several servers: Postgres, and Redis for the queue and rate limits |
+| **Self-declared** (`ALLOW_SELF_DECLARED_AGE=true`): people type their date of birth | Free | Weak: anyone can lie. Same approach Omegle used. Some countries (e.g. the UK under the Online Safety Act) require stronger checks for adult-only services |
+| **Verification provider** (Yoti, Persona, Veriff): ID or face age estimate | Roughly $0.10-$1.50 per check | Strong, and bans follow the person, not the email. Needs code to connect the provider |
 
-## Deploying
+### 2. Get a TURN server
 
-Any host that runs a long-lived Node process with WebSockets works (Render,
-Railway, Fly.io, or a VPS behind nginx or Caddy). It needs:
+Without one, about 1 in 6 calls fails to connect. Hosted options with free
+tiers: [Metered](https://www.metered.ca/stun-turn), [Cloudflare Realtime TURN](https://developers.cloudflare.com/realtime/turn/),
+or run your own [coturn](https://github.com/coturn/coturn) on a small VPS.
+Copy the server addresses, username and credential for step 4.
 
-1. HTTPS, so browsers allow the camera.
-2. `NODE_ENV=production`.
-3. A persistent disk, with `DB_PATH` pointing to it, or accounts are lost on every redeploy.
+### 3. Fill in the legal pages
 
-Serverless platforms (like Vercel functions) won't work, because the WebSocket
-connection has to stay open.
+Replace every highlighted `[placeholder]` in `public/terms.html` and
+`public/privacy.html` (your name, contact email, country, dates), and have a
+lawyer review them. They link from the sign-up form.
+
+### 4. Deploy on Render
+
+1. Sign in to [render.com](https://render.com) with GitHub.
+2. **New > Blueprint**, choose this repo. Render reads `render.yaml`.
+3. Enter the values it asks for: `ALLOW_SELF_DECLARED_AGE`, `TURN_URLS`, `TURN_USERNAME`, `TURN_CREDENTIAL`.
+4. Create. The first deploy takes a few minutes. Your site is at `https://openline-xxxx.onrender.com`.
+
+The blueprint uses the **Starter** plan (about $7/month) plus a 1 GB disk
+(about $0.25/month), because the free plan has no disk: every account would
+vanish on each deploy, and free services sleep when idle, dropping calls.
+After this, every push to `main` redeploys automatically.
+
+Other hosts work too (Railway, Fly.io, a VPS with Caddy or nginx), as long as
+they run a long-lived Node process with WebSockets, serve HTTPS, and give you a
+persistent disk for `DB_PATH`. Serverless platforms (like Vercel functions)
+won't work.
+
+### 5. Optional: your own domain
+
+Buy a domain (about $10-15/year), add it under the service's **Settings >
+Custom Domains** in Render, and follow the DNS instructions. HTTPS is set up
+for you.
+
+### 6. After launch
+
+- Check `npm run admin -- suspended` and `reports` often.
+- Back up the database: Render keeps daily disk snapshots on paid plans. For an extra copy, run `npm run admin -- backup /var/data/backup.db` from the Shell.
+- Still to build: email confirmation and "forgot password" (needs an email service such as Resend or Postmark), and a review process for appeals.
 
 ## Limits
 
 - The safety code only helps if the two people compare it, for example by reading it out loud.
 - Calls can't be seen by the server, so moderation depends on reports, verification and bans.
-- Talk to a lawyer before launch about terms of service, a privacy policy, retention of verification records, and the rules where you'll operate.
+- Peer-to-peer calls let each person see the other's IP address (the Privacy Policy says so).
+- For more than one server: Postgres instead of SQLite, and Redis for the queue and rate limits.
+- Talk to a lawyer before launch about the terms, privacy policy, and the rules where you'll operate.

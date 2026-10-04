@@ -17,6 +17,13 @@ const { WebSocketServer } = require('ws');
 
 const PORT = process.env.PORT || 3000;
 const IS_PROD = process.env.NODE_ENV === 'production';
+// Self-declared date of birth is always on in development. In production it is
+// off unless explicitly allowed, because a typed-in birthday is easily faked.
+const SELF_DECLARED_AGE = !IS_PROD || process.env.ALLOW_SELF_DECLARED_AGE === 'true';
+// Number of reverse proxies in front of the app (Render, Fly, nginx...), so
+// rate limits see the visitor's real IP address.
+const TRUST_PROXY = Number(process.env.TRUST_PROXY ?? (IS_PROD ? 1 : 0));
+const ICE_SERVERS = buildIceServers();
 const DB_PATH = process.env.DB_PATH || path.join(__dirname, 'data', 'openline.db');
 const SESSION_COOKIE = 'ol_session';
 const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;   // stay logged in for 30 days
@@ -28,6 +35,21 @@ const MAX_MSG_BYTES = 64 * 1024;
 const INTEREST_WAIT_MS = 5000;        // how long to hold out for a shared interest
 const MAX_INTERESTS = 5;
 const HEARTBEAT_MS = 30_000;
+
+// STUN finds a public address; TURN relays the call when two people can't
+// connect directly (strict NATs, some mobile networks). Without TURN, roughly
+// 10-20% of calls fail.
+function buildIceServers() {
+  const servers = [{ urls: (process.env.STUN_URLS || 'stun:stun.l.google.com:19302').split(',').map((u) => u.trim()) }];
+  if (process.env.TURN_URLS) {
+    servers.push({
+      urls: process.env.TURN_URLS.split(',').map((u) => u.trim()),
+      username: process.env.TURN_USERNAME || '',
+      credential: process.env.TURN_CREDENTIAL || '',
+    });
+  }
+  return servers;
+}
 
 // ---------- Database ----------
 fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
@@ -57,6 +79,11 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS reports_target ON reports(target);
   CREATE TABLE IF NOT EXISTS blocked_pairs (pair TEXT PRIMARY KEY);
 `);
+// Added after the first release: when a moderator lifted a suspension.
+// Reports made before then no longer count toward a new automatic suspension.
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'cleared_at')) {
+  db.exec('ALTER TABLE users ADD COLUMN cleared_at INTEGER');
+}
 
 const q = {
   userByEmail:   db.prepare('SELECT * FROM users WHERE email = ?'),
@@ -74,7 +101,8 @@ const q = {
   deleteOtherUserSessions: db.prepare('DELETE FROM sessions WHERE user_id = ? AND id_hash != ?'),
   purgeSessions: db.prepare('DELETE FROM sessions WHERE expires_at <= ?'),
   insertReport:  db.prepare('INSERT INTO reports (at, reporter, target, reason) VALUES (?, ?, ?, ?)'),
-  reporterCount: db.prepare('SELECT COUNT(DISTINCT reporter) AS n FROM reports WHERE target = ?'),
+  reporterCount: db.prepare(`SELECT COUNT(DISTINCT reporter) AS n FROM reports
+                             WHERE target = ? AND at > COALESCE((SELECT cleared_at FROM users WHERE id = ?), 0)`),
   blockPair:     db.prepare('INSERT OR IGNORE INTO blocked_pairs (pair) VALUES (?)'),
   isBlocked:     db.prepare('SELECT 1 FROM blocked_pairs WHERE pair = ?'),
 };
@@ -150,7 +178,7 @@ const publicUser = (u) => ({
 
 // ---------- HTTP app ----------
 const app = express();
-if (IS_PROD) app.set('trust proxy', 1); // behind one reverse proxy (see README)
+if (TRUST_PROXY > 0) app.set('trust proxy', TRUST_PROXY);
 app.disable('x-powered-by');
 app.use((req, res, next) => {
   // Older Safari doesn't count ws:/wss: as 'self', so name the socket origin.
@@ -220,7 +248,22 @@ function readCredentials(body) {
   return { email, password };
 }
 
-app.get('/api/config', (_req, res) => res.json({ devVerification: !IS_PROD }));
+app.get('/healthz', (_req, res) => {
+  try {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  } catch {
+    res.status(503).json({ ok: false });
+  }
+});
+
+app.get('/api/config', (_req, res) => res.json({ selfDeclaredAge: SELF_DECLARED_AGE, dev: !IS_PROD }));
+
+// Connection servers, including TURN credentials, only go to people who can call.
+app.get('/api/ice', requireUser, (req, res) => {
+  if (!req.user.verified_at || req.user.suspended_at) return res.status(403).json({ error: 'Not allowed.' });
+  res.set('Cache-Control', 'no-store').json({ iceServers: ICE_SERVERS });
+});
 
 app.get('/api/me', (req, res) => res.json({ user: req.user ? publicUser(req.user) : null }));
 
@@ -317,15 +360,14 @@ app.post('/api/account/delete', requireUser, async (req, res) => {
 });
 
 // ---------- Age verification ----------
-// PRODUCTION: replace this with a real provider (Yoti, Persona, Veriff...).
+// STRONGER OPTION: replace this with a real provider (Yoti, Persona, Veriff...).
 // Their webhook/callback tells you the logged-in user passed an 18+ check;
 // set verified_at on that account. Store the provider's stable person id too,
 // and refuse to verify a second account for the same person, so bans can't be
 // dodged by signing up again.
 //
-// DEVELOPMENT ONLY: a self-declared date of birth stands in for verification.
-// This route is disabled when NODE_ENV=production because a typed-in birthday
-// is trivially faked.
+// SELF-DECLARED: the user types their date of birth. Always on in development;
+// in production only when ALLOW_SELF_DECLARED_AGE=true.
 function ageFromDob(dob) {
   const d = new Date(dob);
   if (!dob || Number.isNaN(d.getTime())) return null;
@@ -336,8 +378,8 @@ function ageFromDob(dob) {
   return age >= 0 && age < 130 ? age : null;
 }
 
-app.post('/api/verify/dev', requireUser, (req, res) => {
-  if (IS_PROD) return res.status(404).end();
+app.post('/api/verify/age', requireUser, (req, res) => {
+  if (!SELF_DECLARED_AGE) return res.status(404).json({ error: 'Age verification is not available yet.' });
   const age = ageFromDob(req.body && req.body.dob);
   if (age === null) return res.status(400).json({ error: 'Enter a valid date of birth.' });
   if (age < 18) return res.status(403).json({ error: 'You must be 18 or older to use Openline.' });
@@ -457,7 +499,7 @@ function handleReport(client, reason) {
   send(client.ws, { type: 'reported' });
 
   // An "appears under 18" report suspends immediately pending human review.
-  if (reason === 'underage' || q.reporterCount.get(target).n >= SUSPEND_AFTER_REPORTS) {
+  if (reason === 'underage' || q.reporterCount.get(target, target).n >= SUSPEND_AFTER_REPORTS) {
     q.suspendUser.run(Date.now(), target);
     for (const c of clientsBySub.get(target) || []) c.ws.close(4004, 'suspended');
   }
@@ -513,13 +555,18 @@ wss.on('connection', (ws, req) => {
     if (!msg || typeof msg !== 'object') return;
 
     switch (msg.type) {
-      case 'find':
+      case 'find': {
+        // Re-check the account, so moderator actions and logouts elsewhere take effect.
+        const current = q.sessionUser.get(sessionHash, Date.now());
+        if (!current) return ws.close(4001, 'logged out');
+        if (current.suspended_at) return ws.close(4004, 'suspended');
         if (!withinRate(client)) {
           return send(ws, { type: 'error', message: 'Too many skips. Wait a minute, then try again.' });
         }
         unpair(client);
         findMatch(client, msg.interests);
         break;
+      }
       case 'signal':
         // Relay SDP/ICE only to the current partner. Content is opaque to us.
         if (client.peer) send(client.peer.ws, { type: 'signal', data: msg.data });
@@ -565,5 +612,7 @@ for (const sig of ['SIGINT', 'SIGTERM']) {
 }
 
 server.listen(PORT, () => {
-  console.log(`Openline running on http://localhost:${PORT}${IS_PROD ? '' : '  (dev age check enabled)'}`);
+  console.log(`Openline running on http://localhost:${PORT}${IS_PROD ? ' (production)' : ' (development)'}`);
+  if (IS_PROD && !SELF_DECLARED_AGE) console.warn('Age verification is off: nobody can be verified. Set ALLOW_SELF_DECLARED_AGE=true or connect a provider.');
+  if (IS_PROD && !process.env.TURN_URLS) console.warn('No TURN server set (TURN_URLS): some users will not be able to connect.');
 });

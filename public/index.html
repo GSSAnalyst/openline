@@ -35,7 +35,7 @@
         <input type="password" id="password" autocomplete="current-password" minlength="8" required>
         <label class="check" id="agreeRow" hidden>
           <input type="checkbox" id="agree">
-          <span>I'm 18 or older and I agree to the rules above.</span>
+          <span>I'm 18 or older, and I agree to the <a href="/terms.html" target="_blank">Terms</a> and the rules above. I've read the <a href="/privacy.html" target="_blank">Privacy Policy</a>.</span>
         </label>
         <button class="btn btn-primary btn-wide" type="submit" id="authBtn">Log in</button>
         <p class="form-error" id="authError" role="alert"></p>
@@ -49,15 +49,21 @@
         <input type="date" id="dob" required>
         <button class="btn btn-primary btn-wide" type="submit" id="verifyBtn">Verify my age</button>
         <p class="form-error" id="formError" role="alert"></p>
-        <p class="dev-note" id="devNote" hidden>Development mode: a date of birth stands in for real ID verification. Production uses a verification provider instead.</p>
+        <p class="dev-note" id="devNote" hidden>Development mode: a typed date of birth stands in for age verification.</p>
         <p class="dev-note">Not you? <button type="button" class="link-btn" data-logout>Log out</button></p>
       </form>
+      <div id="verifyUnavailable" hidden>
+        <p>Age verification isn't open yet. Please check back soon.</p>
+        <button class="btn btn-quiet" type="button" data-logout>Log out</button>
+      </div>
     </section>
 
     <section id="suspendedView" hidden>
       <p class="form-error">This account is suspended after reports from other users and is under review.</p>
       <button class="btn btn-quiet" type="button" data-logout>Log out</button>
     </section>
+
+    <footer class="legal"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></footer>
   </div>
 </main>
 

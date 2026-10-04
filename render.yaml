@@ -1,0 +1,30 @@
+# Render Blueprint: https://render.com/docs/blueprint-spec
+# In Render: New > Blueprint > pick this repo. Values marked sync: false are
+# asked for in the dashboard so secrets never live in git.
+services:
+  - type: web
+    name: openline
+    runtime: node
+    plan: starter            # paid plan: needed for the persistent disk below
+    region: oregon           # pick the region closest to your users
+    buildCommand: npm ci
+    startCommand: npm start
+    healthCheckPath: /healthz
+    autoDeploy: true         # redeploy on every push to main
+    disk:
+      name: openline-data
+      mountPath: /var/data
+      sizeGB: 1
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DB_PATH
+        value: /var/data/openline.db
+      - key: ALLOW_SELF_DECLARED_AGE   # "true" to launch with typed date of birth (see README)
+        sync: false
+      - key: TURN_URLS                 # e.g. turn:global.relay.metered.ca:80,turns:global.relay.metered.ca:443?transport=tcp
+        sync: false
+      - key: TURN_USERNAME
+        sync: false
+      - key: TURN_CREDENTIAL
+        sync: false

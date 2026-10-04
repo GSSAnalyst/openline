@@ -1,7 +1,6 @@
 (() => {
-  // STUN finds your public address. Add a TURN server (e.g. coturn) for
-  // users behind strict NATs or the call will fail for them.
-  const RTC_CONFIG = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
+  // Replaced by the server's list (STUN + TURN) once the user can call.
+  let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
   const $ = (id) => document.getElementById(id);
   const gate = $('gate'), call = $('call');
@@ -83,7 +82,7 @@
     if (!email || !password) { err.textContent = 'Enter your email and password.'; return; }
     if (mode === 'signup') {
       if (password.length < 8) { err.textContent = 'Use a password of at least 8 characters.'; return; }
-      if (!$('agree').checked) { err.textContent = 'Confirm you are 18 or older and agree to the rules.'; return; }
+      if (!$('agree').checked) { err.textContent = 'Confirm you are 18 or older and agree to the Terms.'; return; }
     }
     $('authBtn').disabled = true;
     try {
@@ -104,7 +103,7 @@
     if (!$('dob').value) { err.textContent = 'Enter your date of birth.'; return; }
     $('verifyBtn').disabled = true;
     try {
-      ({ user: me } = await api('/api/verify/dev', { dob: $('dob').value }));
+      ({ user: me } = await api('/api/verify/age', { dob: $('dob').value }));
       await route();
     } catch (ex) {
       err.textContent = ex.message;
@@ -173,7 +172,11 @@
     }
   });
 
-  fetch('/api/config').then(r => r.json()).then(c => { $('devNote').hidden = !c.devVerification; }).catch(() => {});
+  fetch('/api/config').then(r => r.json()).then(c => {
+    $('devNote').hidden = !c.dev;
+    $('verifyForm').hidden = !c.selfDeclaredAge;
+    $('verifyUnavailable').hidden = c.selfDeclaredAge;
+  }).catch(() => {});
   api('/api/me').then((d) => { me = d.user; }).catch(() => {}).finally(route);
 
   function stopMedia() {
@@ -192,6 +195,7 @@
     setStatus('Starting camera');
     showPlaceholder('Press Start to meet someone.');
     updateButtons();
+    api('/api/ice').then((c) => { rtcConfig = { iceServers: c.iceServers }; }).catch(() => {});
     try {
       localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localVideo.srcObject = localStream;
@@ -290,7 +294,7 @@
   // ---------- WebRTC ----------
   function createPeer() {
     closePeer();
-    pc = new RTCPeerConnection(RTC_CONFIG);
+    pc = new RTCPeerConnection(rtcConfig);
     localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
     pc.ontrack = (e) => {
       remoteVideo.srcObject = e.streams[0];
