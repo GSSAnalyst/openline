@@ -2,8 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Openline</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Openline: talk face to face with someone new</title>
+<meta name="description" content="Random one-to-one video chat for adults. Calls go straight between browsers and are encrypted.">
+<meta name="theme-color" content="#141D28">
+<meta property="og:title" content="Openline">
+<meta property="og:description" content="Talk face to face with someone new. Random 1-to-1 video chat for adults, encrypted between browsers.">
+<meta property="og:type" content="website">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&display=swap" rel="stylesheet">
@@ -11,105 +17,162 @@
 </head>
 <body>
 
+<!-- Icons (Lucide-style strokes), used as <svg class="i"><use href="#i-name"/></svg> -->
+<svg class="sprite" aria-hidden="true">
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+  <symbol id="i-video" viewBox="0 0 24 24"><path d="m16 13 5.2 3.5a.5.5 0 0 0 .8-.4V7.9a.5.5 0 0 0-.8-.4L16 10.5"/><rect x="2" y="6" width="14" height="12" rx="2"/></symbol>
+  <symbol id="i-slash" viewBox="0 0 24 24"><path d="M3 3l18 18"/></symbol>
+  <symbol id="i-next" viewBox="0 0 24 24"><path d="M5 4l10 8-10 8z"/><path d="M19 5v14"/></symbol>
+  <symbol id="i-stop" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12" rx="2"/></symbol>
+  <symbol id="i-flag" viewBox="0 0 24 24"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></symbol>
+  <symbol id="i-message" viewBox="0 0 24 24"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-hash" viewBox="0 0 24 24"><path d="M4 9h16M4 15h16M10 3 8 21M16 3l-2 18"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-camera-off" viewBox="0 0 24 24"><path d="M2 2l20 20"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h12a2 2 0 0 0 1.7-1"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/></symbol>
+</svg>
+
 <main id="gate" class="gate">
   <div class="gate-inner">
-    <h1 class="wordmark">Openline<span class="dot" aria-hidden="true"></span></h1>
-    <p class="lede">Talk face to face with a random adult. Calls go straight between your browsers and are encrypted. We never see or store your video.</p>
-
-    <ul class="rules">
-      <li>Openline is for adults 18 and over only.</li>
-      <li>No nudity or sexual content.</li>
-      <li>No harassment, hate, or threats.</li>
-      <li>Report anyone who looks under 18. They are removed right away.</li>
-    </ul>
-
-    <section id="authView" hidden>
-      <div class="tabs" role="tablist">
-        <button class="tab" role="tab" id="loginTab" aria-selected="true">Log in</button>
-        <button class="tab" role="tab" id="signupTab" aria-selected="false">Sign up</button>
-      </div>
-      <form id="authForm" novalidate>
-        <label class="field" for="email">Email</label>
-        <input type="email" id="email" autocomplete="email" required>
-        <label class="field" for="password">Password</label>
-        <input type="password" id="password" autocomplete="current-password" minlength="8" required>
-        <label class="check" id="agreeRow" hidden>
-          <input type="checkbox" id="agree">
-          <span>I'm 18 or older, and I agree to the <a href="/terms.html" target="_blank">Terms</a> and the rules above. I've read the <a href="/privacy.html" target="_blank">Privacy Policy</a>.</span>
-        </label>
-        <button class="btn btn-primary btn-wide" type="submit" id="authBtn">Log in</button>
-        <p class="form-error" id="authError" role="alert"></p>
-      </form>
+    <section class="brand">
+      <h1 class="wordmark">Openline<span class="dot" aria-hidden="true"></span></h1>
+      <p class="lede">Talk face to face with someone new. One click, one stranger, one real conversation.</p>
     </section>
 
-    <section id="verifyView" hidden>
-      <form id="verifyForm" novalidate>
-        <p>Logged in as <strong id="verifyWho"></strong>. One more step: confirm your age before your first call.</p>
-        <label class="field" for="dob">Date of birth</label>
-        <input type="date" id="dob" required>
-        <button class="btn btn-primary btn-wide" type="submit" id="verifyBtn">Verify my age</button>
-        <p class="form-error" id="formError" role="alert"></p>
-        <p class="dev-note" id="devNote" hidden>Development mode: a typed date of birth stands in for age verification.</p>
-        <p class="dev-note">Not you? <button type="button" class="link-btn" data-logout>Log out</button></p>
-      </form>
-      <div id="verifyUnavailable" hidden>
-        <p>Age verification isn't open yet. Please check back soon.</p>
+    <section class="details">
+      <ul class="features">
+        <li><span class="feat-icon"><svg class="i"><use href="#i-lock"/></svg></span><span><strong>Private by design</strong>Video and chat go straight between your browsers, encrypted. We never see or store them.</span></li>
+        <li><span class="feat-icon"><svg class="i"><use href="#i-hash"/></svg></span><span><strong>Shared interests</strong>Add a few topics and get matched with someone who likes them too.</span></li>
+        <li><span class="feat-icon"><svg class="i"><use href="#i-shield"/></svg></span><span><strong>Adults only, moderated</strong>Everyone confirms they're 18+. Report anyone who breaks the rules.</span></li>
+      </ul>
+
+      <details class="rules">
+        <summary>House rules</summary>
+        <ul>
+          <li>Openline is for adults 18 and over only.</li>
+          <li>No nudity or sexual content.</li>
+          <li>No harassment, hate, or threats.</li>
+          <li>Report anyone who looks under 18. They are removed right away.</li>
+        </ul>
+      </details>
+    </section>
+
+    <section class="card">
+      <div id="authView" class="view" hidden>
+        <div class="tabs" role="tablist" id="tabs" data-mode="login">
+          <button class="tab" role="tab" id="loginTab" aria-selected="true" type="button">Log in</button>
+          <button class="tab" role="tab" id="signupTab" aria-selected="false" type="button">Sign up</button>
+        </div>
+        <form id="authForm" novalidate>
+          <label class="field" for="email">Email</label>
+          <input type="email" id="email" autocomplete="email" inputmode="email" required>
+          <label class="field" for="password">Password</label>
+          <div class="pw">
+            <input type="password" id="password" autocomplete="current-password" minlength="8" required>
+            <button type="button" class="pw-toggle" id="pwToggle" aria-label="Show password" aria-pressed="false"><svg class="i"><use href="#i-eye"/></svg></button>
+          </div>
+          <p class="field-hint" id="pwHint" hidden>At least 8 characters.</p>
+          <label class="check" id="agreeRow" hidden>
+            <input type="checkbox" id="agree">
+            <span>I'm 18 or older, and I agree to the <a href="/terms.html" target="_blank">Terms</a> and house rules. I've read the <a href="/privacy.html" target="_blank">Privacy Policy</a>.</span>
+          </label>
+          <button class="btn btn-primary btn-wide" type="submit" id="authBtn">Log in</button>
+          <p class="form-error" id="authError" role="alert"></p>
+        </form>
+      </div>
+
+      <div id="verifyView" class="view" hidden>
+        <form id="verifyForm" novalidate>
+          <h2 class="card-title">One more step</h2>
+          <p class="muted">Logged in as <strong id="verifyWho"></strong>. Confirm your age before your first call.</p>
+          <label class="field" for="dob">Date of birth</label>
+          <input type="date" id="dob" required>
+          <button class="btn btn-primary btn-wide" type="submit" id="verifyBtn">Verify my age</button>
+          <p class="form-error" id="formError" role="alert"></p>
+          <p class="dev-note" id="devNote" hidden>Development mode: a typed date of birth stands in for age verification.</p>
+          <p class="dev-note">Not you? <button type="button" class="link-btn" data-logout>Log out</button></p>
+        </form>
+        <div id="verifyUnavailable" hidden>
+          <h2 class="card-title">Almost there</h2>
+          <p class="muted">Age verification isn't open yet. Please check back soon.</p>
+          <button class="btn btn-quiet" type="button" data-logout>Log out</button>
+        </div>
+      </div>
+
+      <div id="suspendedView" class="view" hidden>
+        <h2 class="card-title">Account suspended</h2>
+        <p class="muted">This account is suspended after reports from other users and is under review.</p>
         <button class="btn btn-quiet" type="button" data-logout>Log out</button>
       </div>
-    </section>
 
-    <section id="suspendedView" hidden>
-      <p class="form-error">This account is suspended after reports from other users and is under review.</p>
-      <button class="btn btn-quiet" type="button" data-logout>Log out</button>
-    </section>
+      <div id="bootView" class="boot" role="status" aria-label="Loading"><span class="spinner"></span></div>
 
-    <footer class="legal"><a href="/terms.html">Terms</a> · <a href="/privacy.html">Privacy</a></footer>
+      <footer class="legal"><a href="/terms.html">Terms</a><span aria-hidden="true">·</span><a href="/privacy.html">Privacy</a></footer>
+    </section>
   </div>
 </main>
 
 <div id="call" class="call" hidden>
   <header class="topbar">
     <p class="wordmark">Openline<span class="dot" aria-hidden="true"></span></p>
+    <div class="pill status" aria-live="polite"><span class="lamp" id="lamp"></span><span id="statusText">Starting camera</span></div>
     <div class="topbar-right">
-      <div class="status" aria-live="polite"><span class="lamp" id="lamp"></span><span id="statusText">Starting camera</span></div>
-      <span class="online" id="online" hidden></span>
-      <div class="account"><span class="who" id="whoami"></span><button class="btn btn-quiet btn-small" type="button" id="feedbackBtn">Feedback</button><button class="btn btn-quiet btn-small" type="button" id="settingsBtn">Account</button><button class="btn btn-quiet btn-small" type="button" data-logout>Log out</button></div>
+      <span class="pill online" id="online" hidden></span>
+      <span class="who" id="whoami"></span>
+      <button class="icon-btn" type="button" id="feedbackBtn" aria-label="Send feedback" title="Send feedback"><svg class="i"><use href="#i-message"/></svg></button>
+      <button class="icon-btn" type="button" id="settingsBtn" aria-label="Account settings" title="Account"><svg class="i"><use href="#i-user"/></svg></button>
+      <button class="icon-btn" type="button" data-logout aria-label="Log out" title="Log out"><svg class="i"><use href="#i-logout"/></svg></button>
     </div>
   </header>
 
   <div class="main">
-    <section class="stage" aria-label="Video">
+    <section class="stage" id="stage" aria-label="Video">
       <video id="remoteVideo" autoplay playsinline></video>
-      <div class="placeholder" id="placeholder">Press Start to meet someone.</div>
-      <div class="safety" id="safety" hidden title="Ask the other person to read their code. If it matches yours, nobody is intercepting the call.">Safety code <strong id="safetyCode"></strong></div>
-      <div class="pip"><video id="localVideo" autoplay playsinline muted></video></div>
+      <div class="placeholder" id="placeholder">
+        <div class="ph-visual" aria-hidden="true"><span></span></div>
+        <p id="placeholderText">Press Start to meet someone.</p>
+      </div>
+      <div class="chip safety" id="safety" hidden title="Ask the other person to read their code. If it matches yours, nobody is intercepting the call."><svg class="i"><use href="#i-shield"/></svg>Safety code <strong id="safetyCode"></strong></div>
+      <div class="pip" id="pip">
+        <video id="localVideo" autoplay playsinline muted></video>
+        <div class="pip-off" aria-hidden="true"><svg class="i"><use href="#i-camera-off"/></svg></div>
+        <span class="pip-label">You</span>
+      </div>
     </section>
 
     <aside class="chat" aria-label="Text chat">
       <div class="interests">
-        <label for="interests">Your interests (optional, comma separated)</label>
+        <label for="interests"><svg class="i"><use href="#i-hash"/></svg>Interests <span class="muted">optional, comma separated</span></label>
         <input type="text" id="interests" placeholder="music, travel, football" maxlength="140" autocomplete="off">
       </div>
       <ul class="chat-log" id="chatLog" aria-live="polite"></ul>
-      <div>
+      <div class="chat-bottom">
         <div class="typing" id="typing"></div>
         <form class="chat-form" id="chatForm">
           <input type="text" id="chatInput" placeholder="Chat opens when you are connected" maxlength="1000" autocomplete="off" disabled aria-label="Message">
-          <button class="btn btn-primary" id="sendBtn" disabled>Send</button>
+          <button class="send-btn" id="sendBtn" disabled aria-label="Send message"><svg class="i"><use href="#i-send"/></svg></button>
         </form>
       </div>
     </aside>
   </div>
 
-  <footer class="controls">
-    <button class="btn btn-quiet" id="micBtn" aria-pressed="false">Mute</button>
-    <button class="btn btn-quiet" id="camBtn" aria-pressed="false">Camera off</button>
-    <span class="spacer"></span>
-    <button class="btn btn-primary" id="nextBtn">Start</button>
-    <button class="btn btn-quiet" id="stopBtn" disabled>Stop</button>
-    <span class="spacer"></span>
-    <button class="btn btn-danger" id="reportBtn" disabled>Report</button>
-    <span class="hint"><kbd>Esc</kbd> next &nbsp; <kbd>/</kbd> chat</span>
+  <footer class="dock">
+    <div class="dock-group">
+      <button class="round-btn" id="micBtn" aria-pressed="false" aria-label="Mute microphone" title="Mute"><svg class="i"><use href="#i-mic"/></svg><svg class="i slash"><use href="#i-slash"/></svg></button>
+      <button class="round-btn" id="camBtn" aria-pressed="false" aria-label="Turn camera off" title="Camera off"><svg class="i"><use href="#i-video"/></svg><svg class="i slash"><use href="#i-slash"/></svg></button>
+    </div>
+    <div class="dock-group">
+      <button class="btn btn-primary btn-next" id="nextBtn"><svg class="i"><use href="#i-next"/></svg><span id="nextLabel">Start</span></button>
+      <button class="btn btn-quiet" id="stopBtn" disabled aria-label="Stop" title="Stop"><svg class="i"><use href="#i-stop"/></svg><span>Stop</span></button>
+    </div>
+    <div class="dock-group">
+      <button class="btn btn-danger" id="reportBtn" disabled aria-label="Report this person" title="Report"><svg class="i"><use href="#i-flag"/></svg><span>Report</span></button>
+      <span class="hint"><kbd>Esc</kbd> next <kbd>/</kbd> chat</span>
+    </div>
   </footer>
 </div>
 
@@ -124,7 +187,7 @@
     <label class="reason"><input type="radio" name="reason" value="other"> Something else</label>
     <div class="dialog-actions">
       <button class="btn btn-quiet" value="cancel" formnovalidate>Cancel</button>
-      <button class="btn btn-danger" value="submit">Report and leave</button>
+      <button class="btn btn-danger-solid" value="submit">Report and leave</button>
     </div>
   </form>
 </dialog>

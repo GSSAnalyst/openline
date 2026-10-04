@@ -390,13 +390,17 @@ app.post('/api/account/delete', requireUser, async (req, res) => {
 //
 // SELF-DECLARED: the user types their date of birth. Always on in development;
 // in production only when ALLOW_SELF_DECLARED_AGE=true.
+// Works on the plain YYYY-MM-DD date, so the server's time zone can't shift
+// someone's birthday by a day.
 function ageFromDob(dob) {
-  const d = new Date(dob);
-  if (!dob || Number.isNaN(d.getTime())) return null;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dob || ''));
+  if (!m) return null;
+  const [y, mo, d] = m.slice(1).map(Number);
+  const birth = new Date(Date.UTC(y, mo - 1, d));
+  if (birth.getUTCMonth() !== mo - 1 || birth.getUTCDate() !== d) return null; // e.g. 2000-02-31
   const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age--;
+  let age = now.getUTCFullYear() - y;
+  if (now.getUTCMonth() + 1 < mo || (now.getUTCMonth() + 1 === mo && now.getUTCDate() < d)) age--;
   return age >= 0 && age < 130 ? age : null;
 }
 
@@ -490,14 +494,17 @@ setInterval(() => {
 }, 1000).unref();
 
 // Online count: distinct logged-in users with an open connection.
+// Batched: many people joining at once cause one update, not one each.
 let lastOnline = -1;
+let onlineTimer = null;
 function broadcastOnline() {
+  onlineTimer = null;
   const count = clientsBySub.size;
   if (count === lastOnline) return;
   lastOnline = count;
   for (const set of clientsBySub.values()) for (const c of set) send(c.ws, { type: 'online', count });
 }
-setInterval(broadcastOnline, 3000).unref();
+const scheduleOnline = () => { onlineTimer ??= setTimeout(broadcastOnline, 500); };
 
 function withinRate(client) {
   const now = Date.now();
@@ -568,7 +575,7 @@ wss.on('connection', (ws, req) => {
   track(clientsBySub, client.sub, client);
   track(clientsBySession, sessionHash, client);
   send(ws, { type: 'ready' });
-  send(ws, { type: 'online', count: clientsBySub.size });
+  scheduleOnline();
   ws.on('pong', () => { client.alive = true; });
 
   ws.on('message', (raw) => {
@@ -608,6 +615,7 @@ wss.on('connection', (ws, req) => {
     removeFromQueue(client);
     untrack(clientsBySub, client.sub, client);
     untrack(clientsBySession, sessionHash, client);
+    scheduleOnline();
   });
 });
 

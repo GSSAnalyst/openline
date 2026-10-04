@@ -3,7 +3,7 @@
   let rtcConfig = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] };
 
   const $ = (id) => document.getElementById(id);
-  const gate = $('gate'), call = $('call');
+  const gate = $('gate'), call = $('call'), stage = $('stage');
   const remoteVideo = $('remoteVideo'), localVideo = $('localVideo');
   const statusText = $('statusText'), lamp = $('lamp'), placeholder = $('placeholder');
   const nextBtn = $('nextBtn'), stopBtn = $('stopBtn'), reportBtn = $('reportBtn');
@@ -18,14 +18,18 @@
   let chan = null;          // WebRTC data channel for text chat
   let typingTimer = null;
   let lastTypingSent = 0;
+  let reconnectTries = 0;
 
-  function setStatus(text, live = false) {
+  // state: '' (idle), 'searching', or 'live'
+  function setStatus(text, state = '') {
     statusText.textContent = text;
-    lamp.classList.toggle('live', live);
+    lamp.className = 'lamp' + (state ? ' ' + state : '');
   }
 
-  function showPlaceholder(text) {
-    placeholder.textContent = text;
+  // mode: 'idle', 'searching', or 'error'
+  function showPlaceholder(text, mode = 'idle') {
+    $('placeholderText').textContent = text;
+    placeholder.className = 'placeholder ' + mode;
     placeholder.hidden = false;
   }
 
@@ -45,6 +49,7 @@
     stopMedia();
     call.hidden = true;
     gate.hidden = false;
+    $('bootView').hidden = true;
     for (const id of ['authView', 'verifyView', 'suspendedView']) $(id).hidden = id !== view;
   }
 
@@ -63,15 +68,24 @@
   let mode = 'login';
   function setMode(next) {
     mode = next;
+    $('tabs').dataset.mode = mode;
     $('loginTab').setAttribute('aria-selected', String(mode === 'login'));
     $('signupTab').setAttribute('aria-selected', String(mode === 'signup'));
     $('authBtn').textContent = mode === 'login' ? 'Log in' : 'Create account';
     $('password').autocomplete = mode === 'login' ? 'current-password' : 'new-password';
     $('agreeRow').hidden = mode === 'login';
+    $('pwHint').hidden = mode === 'login';
     $('authError').textContent = '';
   }
   $('loginTab').addEventListener('click', () => setMode('login'));
   $('signupTab').addEventListener('click', () => setMode('signup'));
+
+  $('pwToggle').addEventListener('click', () => {
+    const show = $('password').type === 'password';
+    $('password').type = show ? 'text' : 'password';
+    $('pwToggle').setAttribute('aria-pressed', String(show));
+    $('pwToggle').setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+  });
 
   $('authForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -88,6 +102,7 @@
     try {
       ({ user: me } = await api(mode === 'login' ? '/api/login' : '/api/signup', { email, password }));
       $('password').value = '';
+      $('password').type = 'password';
       await route();
     } catch (ex) {
       err.textContent = ex.message;
@@ -95,6 +110,9 @@
       $('authBtn').disabled = false;
     }
   });
+
+  // The date picker shouldn't offer dates in the future.
+  $('dob').max = new Date().toISOString().slice(0, 10);
 
   $('verifyForm').addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -121,7 +139,6 @@
   }
   document.querySelectorAll('[data-logout]').forEach((b) => b.addEventListener('click', logout));
 
-  // ---------- Account settings ----------
   // ---------- Feedback ----------
   const feedbackDialog = $('feedbackDialog');
   $('feedbackBtn').addEventListener('click', () => {
@@ -148,6 +165,7 @@
     }
   });
 
+  // ---------- Account settings ----------
   const settingsDialog = $('settingsDialog');
   $('settingsBtn').addEventListener('click', () => {
     $('settingsEmail').textContent = me ? me.email : '';
@@ -215,10 +233,23 @@
     localVideo.srcObject = null;
   }
 
+  function resetMediaButtons() {
+    for (const [btn, on, off] of [[micBtn, 'Mute microphone', 'Unmute microphone'], [camBtn, 'Turn camera off', 'Turn camera on']]) {
+      btn.setAttribute('aria-pressed', 'false');
+      btn.setAttribute('aria-label', on);
+      btn.title = on;
+      btn.dataset.off = off;
+      btn.dataset.on = on;
+    }
+    $('pip').classList.remove('cam-off');
+  }
+
   async function enterCall() {
     gate.hidden = true;
     call.hidden = false;
     nextBtn.disabled = false;
+    reconnectTries = 0;
+    resetMediaButtons();
     setStatus('Starting camera');
     showPlaceholder('Press Start to meet someone.');
     updateButtons();
@@ -229,7 +260,7 @@
       setStatus('Ready');
     } catch {
       setStatus('Camera blocked');
-      showPlaceholder('Openline needs your camera and microphone. Allow access in your browser settings, then reload the page.');
+      showPlaceholder('Openline needs your camera and microphone. Allow access in your browser settings, then reload the page.', 'error');
       nextBtn.disabled = true;
     }
   }
@@ -240,13 +271,17 @@
     return new Promise((resolve, reject) => {
       const proto = location.protocol === 'https:' ? 'wss://' : 'ws://';
       let ready = false;
-      ws = new WebSocket(proto + location.host);
-      ws.onmessage = (e) => {
-        const msg = JSON.parse(e.data);
-        if (msg.type === 'ready') { ready = true; resolve(); }
+      const sock = new WebSocket(proto + location.host);
+      ws = sock;
+      sock.onmessage = (e) => {
+        let msg;
+        try { msg = JSON.parse(e.data); } catch { return; }
+        if (msg.type === 'ready') { ready = true; reconnectTries = 0; resolve(); }
         onServerMessage(msg);
       };
-      ws.onclose = (e) => {
+      sock.onclose = (e) => {
+        if (ws !== sock) return;
+        const wasSearching = searching;
         closePeer();
         searching = false;
         updateButtons();
@@ -262,9 +297,19 @@
         } else if (e.code === 4004) {
           me = { ...me, suspended: true };
           route();
+        } else if (wasSearching && reconnectTries < 3) {
+          // Brief network drop or server restart: try to pick up where we left off.
+          reconnectTries++;
+          setStatus('Reconnecting', 'searching');
+          showPlaceholder('Connection dropped. Reconnecting…', 'searching');
+          setTimeout(() => {
+            if (ws || call.hidden) return;
+            searching = true; // so a failed attempt retries again
+            findNext();
+          }, 1000 * reconnectTries);
         } else {
           setStatus('Disconnected');
-          showPlaceholder('Connection to Openline lost. Press Start to reconnect.');
+          showPlaceholder('Connection to Openline lost. Press Start to reconnect.', 'error');
         }
       };
     });
@@ -276,37 +321,43 @@
   async function onServerMessage(msg) {
     switch (msg.type) {
       case 'waiting':
-        setStatus('Looking for someone');
+        setStatus('Looking for someone', 'searching');
         showPlaceholder(msg.interests && msg.interests.length
           ? `Looking for someone into ${msg.interests.join(', ')}. If nobody turns up in a few seconds, we'll match you with anyone.`
-          : 'Looking for someone to talk to.');
+          : 'Looking for someone to talk to…', 'searching');
         break;
-      case 'matched':
-        setStatus('Connecting');
+      case 'matched': {
+        setStatus('Connecting', 'searching');
+        showPlaceholder('Found someone. Connecting…', 'searching');
         clearChat();
         addLine('sys', msg.common && msg.common.length
           ? `You're talking to someone. You both like ${msg.common.join(', ')}.`
           : "You're talking to someone. Say hi!");
-        createPeer();
-        if (msg.role === 'caller') {
-          setupChannel(pc.createDataChannel('chat', { ordered: true }));
-          const offer = await pc.createOffer();
-          await pc.setLocalDescription(offer);
-          sendSignal({ sdp: pc.localDescription });
-        }
+        const conn = createPeer();
         updateButtons();
+        if (msg.role === 'caller') {
+          setupChannel(conn.createDataChannel('chat', { ordered: true }));
+          try {
+            await conn.setLocalDescription(await conn.createOffer());
+            // Skip if the user pressed Next while the offer was being made.
+            if (conn === pc) sendSignal({ sdp: conn.localDescription });
+          } catch (err) {
+            console.warn('Offer failed', err);
+          }
+        }
         break;
+      }
       case 'signal':
         await handleSignal(msg.data);
         break;
       case 'peer-left':
         addLine('sys', 'They left.');
         closePeer();
-        setStatus('They left');
+        setStatus('They left', 'searching');
         findNext();
         break;
       case 'reported':
-        setStatus('Report sent');
+        setStatus('Report sent. Finding someone new', 'searching');
         break;
       case 'error':
         setStatus(msg.message);
@@ -321,41 +372,54 @@
   // ---------- WebRTC ----------
   function createPeer() {
     closePeer();
-    pc = new RTCPeerConnection(rtcConfig);
-    localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
-    pc.ontrack = (e) => {
+    const conn = new RTCPeerConnection(rtcConfig);
+    pc = conn;
+    if (localStream) localStream.getTracks().forEach((t) => conn.addTrack(t, localStream));
+    conn.ontrack = (e) => {
+      if (conn !== pc) return;
       remoteVideo.srcObject = e.streams[0];
-      placeholder.hidden = true;
+      // Mobile browsers sometimes need an explicit play() for audio.
+      remoteVideo.play().catch(() => {});
     };
-    pc.ondatachannel = (e) => setupChannel(e.channel);
-    pc.onicecandidate = (e) => { if (e.candidate) sendSignal({ candidate: e.candidate }); };
-    pc.onconnectionstatechange = () => {
-      if (!pc) return;
-      if (pc.connectionState === 'connected') {
-        setStatus('Connected, encrypted peer to peer', true);
-        showSafetyCode(pc);
+    conn.ondatachannel = (e) => setupChannel(e.channel);
+    conn.onicecandidate = (e) => { if (e.candidate && conn === pc) sendSignal({ candidate: e.candidate }); };
+    conn.onconnectionstatechange = () => {
+      if (conn !== pc) return;
+      const state = conn.connectionState;
+      if (state === 'connected') {
+        setStatus('Connected · encrypted', 'live');
+        placeholder.hidden = true;
+        stage.classList.add('has-remote');
+        showSafetyCode(conn);
+      } else if (state === 'disconnected') {
+        setStatus('Connection unstable', 'searching');
+      } else if (state === 'failed') {
+        setStatus('Couldn\'t connect. Trying someone else', 'searching');
+        findNext();
       }
-      if (pc.connectionState === 'failed') { setStatus('Call failed to connect'); findNext(); }
     };
+    return conn;
   }
 
   async function handleSignal(data) {
-    if (!pc || !data) return;
+    const conn = pc;
+    if (!conn || !data) return;
     try {
       if (data.sdp) {
-        await pc.setRemoteDescription(data.sdp);
+        await conn.setRemoteDescription(data.sdp);
         if (data.sdp.type === 'offer') {
-          await pc.setLocalDescription(await pc.createAnswer());
-          sendSignal({ sdp: pc.localDescription });
+          await conn.setLocalDescription(await conn.createAnswer());
+          if (conn === pc) sendSignal({ sdp: conn.localDescription });
         }
-        for (const c of pendingCandidates) await pc.addIceCandidate(c);
+        const queued = pendingCandidates;
         pendingCandidates = [];
+        for (const c of queued) await conn.addIceCandidate(c);
       } else if (data.candidate) {
-        if (pc.remoteDescription) await pc.addIceCandidate(data.candidate);
+        if (conn.remoteDescription) await conn.addIceCandidate(data.candidate);
         else pendingCandidates.push(data.candidate);
       }
     } catch (err) {
-      console.warn('Signaling error', err);
+      if (conn === pc) console.warn('Signaling error', err);
     }
   }
 
@@ -414,7 +478,12 @@
     };
   }
 
-  const sendChan = (m) => chan && chan.readyState === 'open' && chan.send(JSON.stringify(m));
+  // Returns whether the message went out (send() itself returns nothing).
+  function sendChan(m) {
+    if (!chan || chan.readyState !== 'open') return false;
+    chan.send(JSON.stringify(m));
+    return true;
+  }
 
   $('chatForm').addEventListener('submit', (e) => {
     e.preventDefault();
@@ -447,6 +516,7 @@
     $('typing').textContent = '';
     $('safety').hidden = true;
     pendingCandidates = [];
+    stage.classList.remove('has-remote');
     remoteVideo.srcObject = null;
     updateButtons();
   }
@@ -454,11 +524,13 @@
   // ---------- Controls ----------
   async function findNext() {
     if (!ws) {
+      setStatus('Connecting to Openline', 'searching');
       try { await connect(); } catch { return; }
     }
     closePeer();
     searching = true;
     updateButtons();
+    showPlaceholder('Looking for someone to talk to…', 'searching');
     sendWS({ type: 'find', interests: readInterests() });
   }
 
@@ -472,7 +544,7 @@
   }
 
   function updateButtons() {
-    nextBtn.textContent = searching ? 'Next' : 'Start';
+    $('nextLabel').textContent = searching ? 'Next' : 'Start';
     stopBtn.disabled = !searching;
     reportBtn.disabled = !pc;
   }
@@ -501,19 +573,20 @@
     }
   });
 
-  micBtn.addEventListener('click', () => {
-    const track = localStream && localStream.getAudioTracks()[0];
+  // ---------- Mic and camera ----------
+  function toggleTrack(btn, track) {
     if (!track) return;
     track.enabled = !track.enabled;
-    micBtn.textContent = track.enabled ? 'Mute' : 'Unmute';
-    micBtn.setAttribute('aria-pressed', String(!track.enabled));
-  });
+    const label = track.enabled ? btn.dataset.on : btn.dataset.off;
+    btn.setAttribute('aria-pressed', String(!track.enabled));
+    btn.setAttribute('aria-label', label);
+    btn.title = label;
+  }
 
+  micBtn.addEventListener('click', () => toggleTrack(micBtn, localStream && localStream.getAudioTracks()[0]));
   camBtn.addEventListener('click', () => {
     const track = localStream && localStream.getVideoTracks()[0];
-    if (!track) return;
-    track.enabled = !track.enabled;
-    camBtn.textContent = track.enabled ? 'Camera off' : 'Camera on';
-    camBtn.setAttribute('aria-pressed', String(!track.enabled));
+    toggleTrack(camBtn, track);
+    if (track) $('pip').classList.toggle('cam-off', !track.enabled);
   });
 })();
